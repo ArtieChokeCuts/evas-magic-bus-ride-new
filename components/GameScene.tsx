@@ -1,10 +1,9 @@
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Html } from '@react-three/drei';
 import Bubble from './Bubble';
 import Environment from './Environment';
-import { GameType, BubbleData, MATH_TARGETS, LETTER_TARGETS } from '../types';
+import { GameType, BubbleData } from '../types';
 
 interface GameSceneProps {
   onScoreUpdate: (type: GameType) => void;
@@ -13,44 +12,46 @@ interface GameSceneProps {
   letterTarget: string;
 }
 
-const LoadingOverlay = () => (
-  <Html center>
-    <div className="flex flex-col items-center justify-center text-indigo-600 font-bold bg-white/80 p-4 rounded-full shadow-xl">
-      <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-      <p>Loading Magic...</p>
-    </div>
-  </Html>
-);
-
 const GameScene: React.FC<GameSceneProps> = ({ onScoreUpdate, onAnyPop, mathTarget, letterTarget }) => {
   const [bubbles, setBubbles] = useState<BubbleData[]>([]);
+  
+  // Use a ref to track the latest targets for the pop handler
+  const latestTargets = useRef({ math: mathTarget, spell: letterTarget });
+  useEffect(() => {
+    latestTargets.current = { math: mathTarget, spell: letterTarget };
+  }, [mathTarget, letterTarget]);
 
   const createInitialBubbles = useCallback(() => {
     const initial: BubbleData[] = [];
-    // Math bubbles - spawning at different heights to stagger entry
-    for (let i = 0; i < 4; i++) {
+    const { math, spell } = latestTargets.current;
+    
+    // Total bubbles per type
+    const BUBBLES_PER_TYPE = 4;
+
+    // Adjusted spawn ranges for centered visibility
+    for (let i = 0; i < BUBBLES_PER_TYPE; i++) {
+      // Math bubbles
       initial.push({
         id: `math-${i}-${Math.random()}`,
-        value: Math.random() > 0.4 ? mathTarget : (Math.floor(Math.random() * 20)).toString(),
+        value: Math.random() > 0.4 ? math : (Math.floor(Math.random() * 15)).toString(),
         type: GameType.MATH,
-        position: [-6 + Math.random() * 4, -12 + i * 5, 0],
-        speed: 0.015 + Math.random() * 0.02,
-        color: '#7B61FF'
+        position: [-4.5 + Math.random() * 2.5, -6 + i * 4, 0],
+        speed: 0.025 + Math.random() * 0.02,
+        color: '#8b5cf6' 
       });
-    }
-    // Spelling bubbles
-    for (let i = 0; i < 4; i++) {
+      
+      // Spelling bubbles
       initial.push({
         id: `spell-${i}-${Math.random()}`,
-        value: Math.random() > 0.4 ? letterTarget : String.fromCharCode(65 + Math.floor(Math.random() * 26)),
+        value: Math.random() > 0.4 ? spell : String.fromCharCode(65 + Math.floor(Math.random() * 26)),
         type: GameType.SPELLING,
-        position: [2 + Math.random() * 4, -14 + i * 5, 0],
-        speed: 0.015 + Math.random() * 0.02,
-        color: '#FF61B6'
+        position: [2 + Math.random() * 2.5, -6 + i * 4 + 2, 0],
+        speed: 0.025 + Math.random() * 0.02,
+        color: '#ec4899'
       });
     }
     setBubbles(initial);
-  }, [mathTarget, letterTarget]);
+  }, []);
 
   useEffect(() => {
     createInitialBubbles();
@@ -58,23 +59,30 @@ const GameScene: React.FC<GameSceneProps> = ({ onScoreUpdate, onAnyPop, mathTarg
 
   const handlePop = (id: string, type: GameType, value: string) => {
     onAnyPop();
-
-    if ((type === GameType.MATH && value === mathTarget) || (type === GameType.SPELLING && value === letterTarget)) {
+    
+    const { math, spell } = latestTargets.current;
+    if ((type === GameType.MATH && value === math) || (type === GameType.SPELLING && value === spell)) {
       onScoreUpdate(type);
     }
 
     setBubbles(prev => {
       return prev.map(b => {
         if (b.id === id) {
-          const isTarget = Math.random() > 0.5;
+          // Re-spawn logic - spawn from bottom with new values
+          const { math: currentMath, spell: currentSpell } = latestTargets.current;
+          const isTarget = Math.random() > 0.35;
+          const xPos = type === GameType.MATH 
+            ? -4.5 + Math.random() * 2.5 
+            : 2 + Math.random() * 2.5;
+
           return {
             ...b,
             id: `${type}-${Math.random()}`,
             value: type === GameType.MATH 
-              ? (isTarget ? mathTarget : Math.floor(Math.random() * 30).toString())
-              : (isTarget ? letterTarget : String.fromCharCode(65 + Math.floor(Math.random() * 26))),
-            position: [type === GameType.MATH ? -6 + Math.random() * 4 : 2 + Math.random() * 4, -12, 0],
-            speed: 0.015 + Math.random() * 0.025
+              ? (isTarget ? currentMath : Math.floor(Math.random() * 20).toString())
+              : (isTarget ? currentSpell : String.fromCharCode(65 + Math.floor(Math.random() * 26))),
+            position: [xPos, -8, 0],
+            speed: 0.025 + Math.random() * 0.025
           };
         }
         return b;
@@ -83,18 +91,20 @@ const GameScene: React.FC<GameSceneProps> = ({ onScoreUpdate, onAnyPop, mathTarg
   };
 
   return (
-    <div className="absolute inset-0 z-0">
-      <Canvas camera={{ position: [0, 0, 10], fov: 55 }}>
-        <Suspense fallback={<LoadingOverlay />}>
-          <Environment />
-          {bubbles.map(bubble => (
-            <Bubble
-              key={bubble.id}
-              {...bubble}
-              onPop={() => handlePop(bubble.id, bubble.type, bubble.value)}
-            />
-          ))}
-        </Suspense>
+    <div className="absolute inset-0 w-full h-full z-0">
+      <Canvas 
+        camera={{ position: [0, 0, 10], fov: 50 }} 
+        dpr={[1, 2]}
+        style={{ width: '100%', height: '100%' }}
+      >
+        <Environment />
+        {bubbles.map(bubble => (
+          <Bubble
+            key={bubble.id}
+            {...bubble}
+            onPop={() => handlePop(bubble.id, bubble.type, bubble.value)}
+          />
+        ))}
       </Canvas>
     </div>
   );

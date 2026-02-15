@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { GameType, GameState, MATH_TARGETS, LETTER_TARGETS } from './types';
 import GameScene from './components/GameScene';
 import { getMagicalCompliment, generateMagicalSpeech, decodeBase64, decodeAudioData } from './geminiService';
@@ -7,271 +7,239 @@ import { getMagicalCompliment, generateMagicalSpeech, decodeBase64, decodeAudioD
 const App: React.FC = () => {
   const [state, setState] = useState<GameState>({
     playing: false,
-    mathLevel: 1,
-    spellingLevel: 1,
+    mathLevel: 0,
+    spellingLevel: 0,
     currentMathTarget: MATH_TARGETS[0],
     currentLetterTarget: LETTER_TARGETS[0],
     score: 0,
     magicMessage: "Welcome, Super Eva! Let's ride!"
   });
 
-  const [loadingMsg, setLoadingMsg] = useState("");
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const bgMusicRef = useRef<HTMLAudioElement | null>(null);
+  const popSoundRef = useRef<HTMLAudioElement | null>(null);
+  const magicSoundRef = useRef<HTMLAudioElement | null>(null);
 
-  const audioRefs = useRef<{
-    loop: any;
-    pop: any;
-    magic: any;
-    theme: any;
-  } | null>(null);
-
-  const audioContextRef = useRef<any>(null);
-
+  // Initialize Audio Assets from ./assets/
   useEffect(() => {
-    // Initializing sounds with strict assets path
-    const loop = new (window as any).Audio('./assets/loop.mp3');
-    loop.loop = true;
-    loop.volume = 0.35;
-    
-    const pop = new (window as any).Audio('./assets/pop.mp3');
-    pop.volume = 0.5;
-    
-    const magic = new (window as any).Audio('./assets/magic.mp3');
-    magic.volume = 0.7;
-    
-    const theme = new (window as any).Audio('./assets/eva_theme.mp3');
-    theme.volume = 0.7;
+    const createSafeAudio = (path: string, volume: number = 0.5, loop: boolean = false) => {
+      const audio = new Audio();
+      audio.loop = loop;
+      audio.volume = volume;
+      audio.preload = 'auto';
+      
+      audio.addEventListener('error', (e) => {
+        console.warn(`Audio asset failed to load: ${path}. Error:`, e);
+      });
 
-    audioRefs.current = { loop, pop, magic, theme };
+      audio.src = path;
+      return audio;
+    };
 
-    // Pre-load logic to avoid "stuck on loading" issues
-    const handleCanPlay = () => console.log("Audio assets ready");
-    loop.addEventListener('canplaythrough', handleCanPlay);
+    // Prepare sounds
+    bgMusicRef.current = createSafeAudio('./assets/loop.mp3', 0.4, true);
+    popSoundRef.current = createSafeAudio('./assets/pop.mp3', 0.5);
+    magicSoundRef.current = createSafeAudio('./assets/magic.mp3', 0.6);
 
     return () => {
-      loop.pause();
-      theme.pause();
-      loop.removeEventListener('canplaythrough', handleCanPlay);
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      if (bgMusicRef.current) {
+        bgMusicRef.current.pause();
+        bgMusicRef.current.src = "";
       }
+      if (audioContextRef.current) audioContextRef.current.close();
     };
   }, []);
 
-  const playSound = (sound: 'pop' | 'magic' | 'theme') => {
-    if (!audioRefs.current || isMuted) return;
-    const audio = audioRefs.current[sound];
-    audio.currentTime = 0;
-    audio.play().catch(e => console.warn(`Audio ${sound} blocked or failed:`, e));
-  };
+  // Sync mute state with audio elements
+  useEffect(() => {
+    const music = bgMusicRef.current;
+    if (music) {
+      if (isMuted || !state.playing) {
+        music.pause();
+      } else {
+        music.play().catch(e => console.debug("Music sync play failed:", e));
+      }
+    }
+  }, [isMuted, state.playing]);
 
-  const speakMagically = async (text: string) => {
-    if (isMuted) return;
+  const speakMessage = async (text: string) => {
+    if (isMuted || isSpeaking) return;
     
     setIsSpeaking(true);
-    const base64 = await generateMagicalSpeech(text);
-    if (!base64) {
-      setIsSpeaking(false);
-      return;
-    }
-
     try {
       if (!audioContextRef.current) {
-        audioContextRef.current = new ((window as any).AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       }
-
       const ctx = audioContextRef.current;
-      const audioData = decodeBase64(base64);
-      const audioBuffer = await decodeAudioData(audioData, ctx, 24000, 1);
-      
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(ctx.destination);
-      source.onended = () => setIsSpeaking(false);
-      source.start();
-    } catch (e) {
-      console.error("Audio playback error:", e);
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      const base64 = await generateMagicalSpeech(text);
+      if (base64) {
+        const audioData = decodeBase64(base64);
+        const buffer = await decodeAudioData(audioData, ctx, 24000, 1);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.onended = () => setIsSpeaking(false);
+        source.start();
+      } else {
+        setIsSpeaking(false);
+      }
+    } catch (err) {
+      console.error("Speech Error:", err);
       setIsSpeaking(false);
     }
   };
 
-  const handleScoreUpdate = useCallback(async (type: GameType) => {
-    playSound('magic');
-
-    let nextMathLevel = state.mathLevel;
-    let nextSpellingLevel = state.spellingLevel;
-    let nextMathTarget = state.currentMathTarget;
-    let nextLetterTarget = state.currentLetterTarget;
-
-    if (type === GameType.MATH) {
-      nextMathLevel += 1;
-      nextMathTarget = MATH_TARGETS[(nextMathLevel - 1) % MATH_TARGETS.length];
-    } else {
-      nextSpellingLevel += 1;
-      nextLetterTarget = LETTER_TARGETS[(nextSpellingLevel - 1) % LETTER_TARGETS.length];
-      
-      if (nextSpellingLevel === 4) {
-        playSound('theme');
-      }
+  const handleScoreUpdate = async (type: GameType) => {
+    const magic = magicSoundRef.current;
+    if (!isMuted && magic && magic.readyState >= 2) {
+      magic.currentTime = 0;
+      magic.play().catch(() => {});
     }
 
-    setState(prev => ({
-      ...prev,
-      mathLevel: nextMathLevel,
-      spellingLevel: nextSpellingLevel,
-      currentMathTarget: nextMathTarget,
-      currentLetterTarget: nextLetterTarget,
-      score: prev.score + 10
-    }));
-
-    setLoadingMsg("MAGIC VOICES...");
-    const msg = await getMagicalCompliment("Eva", type === GameType.MATH ? nextMathLevel : nextSpellingLevel, type);
-    setState(prev => ({ ...prev, magicMessage: msg }));
-    setLoadingMsg("");
-    
-    speakMagically(msg);
-  }, [state.mathLevel, state.spellingLevel, state.currentMathTarget, state.currentLetterTarget, isMuted]);
-
-  const toggleMute = () => {
-    setIsMuted(prev => {
-      const newMuted = !prev;
-      if (audioRefs.current) {
-        if (newMuted) {
-          audioRefs.current.loop.pause();
-        } else if (state.playing) {
-          audioRefs.current.loop.play().catch(() => {});
-        }
+    setState(prev => {
+      const nextScore = prev.score + 10;
+      let nextMathLevel = prev.mathLevel;
+      let nextSpellingLevel = prev.spellingLevel;
+      
+      if (type === GameType.MATH) {
+        nextMathLevel = (prev.mathLevel + 1) % MATH_TARGETS.length;
+      } else {
+        nextSpellingLevel = (prev.spellingLevel + 1) % LETTER_TARGETS.length;
       }
-      return newMuted;
+
+      const nextMathTarget = MATH_TARGETS[nextMathLevel];
+      const nextLetterTarget = LETTER_TARGETS[nextSpellingLevel];
+
+      if (nextScore % 50 === 0) {
+        getMagicalCompliment("Eva", Math.floor(nextScore / 10), type).then(msg => {
+          setState(s => ({ ...s, magicMessage: msg }));
+          speakMessage(msg);
+        });
+      }
+
+      return {
+        ...prev,
+        score: nextScore,
+        mathLevel: nextMathLevel,
+        spellingLevel: nextSpellingLevel,
+        currentMathTarget: nextMathTarget,
+        currentLetterTarget: nextLetterTarget
+      };
     });
+  };
+
+  const handleAnyPop = () => {
+    const pop = popSoundRef.current;
+    if (!isMuted && pop && pop.readyState >= 2) {
+      pop.currentTime = 0;
+      pop.play().catch(() => {});
+    }
   };
 
   const startGame = () => {
     setState(prev => ({ ...prev, playing: true }));
-    if (audioRefs.current && !isMuted) {
-      audioRefs.current.loop.play().catch(() => {});
+    
+    // Explicitly play music on user gesture to bypass autoplay blocks
+    if (bgMusicRef.current && !isMuted) {
+      bgMusicRef.current.play().catch(e => {
+        console.warn("Manual background music play failed:", e);
+      });
     }
-    if (!audioContextRef.current) {
-      audioContextRef.current = new ((window as any).AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+
+    if (audioContextRef.current?.state === 'suspended') {
+      audioContextRef.current.resume();
     }
-    speakMagically("Welcome to the magic ride, Eva! Let's pop some bubbles!");
+    
+    speakMessage("Ready to fly, Super Eva? Let's go!");
   };
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#0a041a] flex flex-col items-center justify-center select-none">
-      
-      <button 
-        onClick={toggleMute}
-        className="absolute top-6 right-6 z-[100] p-4 bg-white/10 backdrop-blur-xl rounded-full shadow-2xl border border-white/20 hover:scale-110 active:scale-95 transition-all pointer-events-auto"
-      >
-        <span className="text-2xl drop-shadow-md">{isMuted ? '🔇' : '🔊'}</span>
-      </button>
+    <div className="relative w-full h-screen bg-gradient-to-b from-purple-900 via-indigo-900 to-blue-900 overflow-hidden font-sans text-white">
+      {state.playing && (
+        <GameScene 
+          mathTarget={state.currentMathTarget}
+          letterTarget={state.currentLetterTarget}
+          onScoreUpdate={handleScoreUpdate}
+          onAnyPop={handleAnyPop}
+        />
+      )}
+
+      {/* UI Overlay */}
+      <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start pointer-events-none z-10">
+        <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 pointer-events-auto shadow-xl">
+          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-300 to-purple-300">
+            Super Eva's Adventure
+          </h1>
+          <div className="text-4xl font-black mt-1 drop-shadow-md">Score: {state.score}</div>
+        </div>
+
+        <div className="flex flex-col gap-3 pointer-events-auto">
+          <div className="bg-blue-500/80 backdrop-blur-md p-3 rounded-xl border border-blue-300/50 min-w-[120px] text-center shadow-lg">
+            <div className="text-[10px] uppercase tracking-widest opacity-80 font-bold">Find Number</div>
+            <div className="text-3xl font-black drop-shadow-sm">{state.currentMathTarget}</div>
+          </div>
+          <div className="bg-pink-500/80 backdrop-blur-md p-3 rounded-xl border border-pink-300/50 min-w-[120px] text-center shadow-lg">
+            <div className="text-[10px] uppercase tracking-widest opacity-80 font-bold">Find Letter</div>
+            <div className="text-3xl font-black drop-shadow-sm">{state.currentLetterTarget}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Magic Message Bubble */}
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl z-20 pointer-events-none">
+        <div className="bg-white/10 backdrop-blur-xl p-6 rounded-3xl border border-white/30 shadow-2xl transition-all duration-500 transform hover:scale-105">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-yellow-300 to-orange-400 rounded-full flex items-center justify-center text-2xl shadow-lg animate-bounce">
+              ✨
+            </div>
+            <p className="text-xl font-medium italic text-purple-100 drop-shadow-sm">
+              {state.magicMessage}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {!state.playing && (
-        <div className="z-50 relative flex flex-col items-center w-full h-full justify-center">
-          <div className="absolute inset-0 z-0">
-            <img 
-              src="./assets/input_file_1.png" 
-              className="w-full h-full object-cover animate-pulse-slow" 
-              alt="Super Eva Poster" 
-              onError={(e) => {
-                const target = e.target as any;
-                if (target.src.includes('assets/')) {
-                  target.src = 'input_file_1.png';
-                } else {
-                  target.style.display = 'none';
-                }
-              }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0a041a] via-transparent to-transparent opacity-80" />
+        <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm">
+          <div className="absolute inset-0 z-[-1]">
+             <img 
+               src="./assets/input_file_1.png" 
+               alt="" 
+               className="w-full h-full object-cover opacity-60"
+               onError={(e) => (e.currentTarget.style.display = 'none')}
+             />
           </div>
 
-          <div className="z-10 flex flex-col items-center animate-in fade-in zoom-in duration-1000 mt-auto mb-24 px-8">
+          <div className="bg-white/10 backdrop-blur-2xl p-12 rounded-[3rem] border border-white/20 text-center shadow-2xl max-w-lg mx-4">
+            <h2 className="text-6xl font-black mb-8 text-white drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]">
+              Super Eva's Ride
+            </h2>
             <button 
               onClick={startGame}
-              className="group relative inline-flex items-center justify-center px-24 py-10 font-black text-white transition-all duration-300 bg-gradient-to-br from-[#ff00ff] to-[#7b61ff] rounded-full hover:from-[#ff55ff] hover:to-[#9b81ff] shadow-[0_20px_60px_rgba(255,0,255,0.4)] hover:shadow-[0_25px_80px_rgba(123,97,255,0.6)] hover:scale-110 active:scale-90 text-5xl border-8 border-white/30"
+              className="group relative px-16 py-8 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full text-4xl font-black hover:scale-110 active:scale-95 transition-all shadow-2xl border-4 border-white/30"
             >
-              PLAY NOW!
+              <span className="relative z-10 text-white">LET'S FLY!</span>
+              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 rounded-full transition-opacity" />
             </button>
-            <p className="mt-8 text-white font-bold text-2xl tracking-widest drop-shadow-[0_2px_10px_rgba(0,0,0,1)] uppercase">
-              ✨ An Educational Adventure ✨
+            <p className="mt-10 text-white/90 italic text-xl font-medium">
+              Pop the numbers and letters to gain magic power!
             </p>
           </div>
         </div>
       )}
 
-      {state.playing && (
-        <>
-          <div className="absolute top-0 w-full p-8 flex flex-col md:flex-row justify-between items-center z-40 pointer-events-none">
-            <div className="flex gap-8 mb-6 md:mb-0">
-              <div className="bg-indigo-900/40 backdrop-blur-xl p-5 rounded-[2rem] shadow-2xl border-2 border-indigo-400/40 flex flex-col items-center min-w-[150px] transform hover:scale-105 transition-all pointer-events-auto">
-                <span className="text-[11px] uppercase font-black text-indigo-300 tracking-[0.3em] mb-1">Math Level</span>
-                <span className="text-4xl font-black text-white drop-shadow-lg">{state.mathLevel}</span>
-                <div className="mt-3 px-5 py-2 bg-indigo-500 text-white rounded-full text-sm font-black shadow-lg animate-bounce-slow border-2 border-white/20">
-                  FIND: {state.currentMathTarget}
-                </div>
-              </div>
-              <div className="bg-pink-900/40 backdrop-blur-xl p-5 rounded-[2rem] shadow-2xl border-2 border-pink-400/40 flex flex-col items-center min-w-[150px] transform hover:scale-105 transition-all pointer-events-auto">
-                <span className="text-[11px] uppercase font-black text-pink-300 tracking-[0.3em] mb-1">Spell Level</span>
-                <span className="text-4xl font-black text-white drop-shadow-lg">{state.spellingLevel}</span>
-                <div className="mt-3 px-5 py-2 bg-pink-500 text-white rounded-full text-sm font-black shadow-lg animate-bounce-slow border-2 border-white/20">
-                  FIND: {state.currentLetterTarget}
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-xl p-2 rounded-full shadow-2xl pointer-events-auto transform hover:rotate-3 transition-transform">
-              <div className="bg-gradient-to-br from-yellow-300 to-orange-500 px-8 py-3 rounded-full flex items-center gap-4 border-4 border-white/30">
-                <span className="text-3xl drop-shadow-md">⭐</span>
-                <span className="text-4xl font-black text-white drop-shadow-xl">{state.score}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="absolute bottom-12 w-full px-8 flex justify-center z-40 pointer-events-none">
-            <div className="max-w-2xl w-full bg-gradient-to-br from-pink-500/20 to-indigo-600/20 backdrop-blur-2xl p-2 rounded-[3rem] shadow-[0_25px_60px_rgba(0,0,0,0.4)] border border-white/20 animate-in fade-in slide-in-from-bottom-12 duration-1000">
-              <div className="bg-white/95 rounded-[2.5rem] px-10 py-8 flex flex-col items-center gap-3 relative overflow-hidden">
-                {isSpeaking && (
-                   <div className="absolute top-4 right-8 flex gap-2 items-end h-6">
-                     <div className="w-1.5 bg-pink-500 animate-[bounce_0.6s_infinite] h-full" style={{ animationDelay: '0s' }}></div>
-                     <div className="w-1.5 bg-indigo-500 animate-[bounce_0.6s_infinite] h-2/3" style={{ animationDelay: '0.1s' }}></div>
-                     <div className="w-1.5 bg-pink-500 animate-[bounce_0.6s_infinite] h-full" style={{ animationDelay: '0.2s' }}></div>
-                   </div>
-                )}
-                <p className="text-center text-[#1a0a3a] font-black text-2xl md:text-3xl leading-tight">
-                  "{state.magicMessage}"
-                </p>
-                {loadingMsg && <p className="text-[12px] uppercase tracking-[0.4em] text-indigo-500 font-black animate-pulse mt-2">Connecting to Stars...</p>}
-              </div>
-            </div>
-          </div>
-
-          <GameScene 
-            onScoreUpdate={handleScoreUpdate} 
-            onAnyPop={() => playSound('pop')}
-            mathTarget={state.currentMathTarget}
-            letterTarget={state.currentLetterTarget}
-          />
-        </>
-      )}
-
-      <style>{`
-        @keyframes bounce-slow {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
-        }
-        .animate-bounce-slow {
-          animation: bounce-slow 2s ease-in-out infinite;
-        }
-        @keyframes pulse-slow {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.05); }
-        }
-        .animate-pulse-slow {
-          animation: pulse-slow 20s ease-in-out infinite;
-        }
-      `}</style>
+      <button 
+        onClick={() => setIsMuted(!isMuted)}
+        className="absolute bottom-6 right-6 p-4 bg-white/10 hover:bg-white/20 rounded-full border border-white/20 transition-all pointer-events-auto z-30 text-2xl shadow-lg backdrop-blur-md"
+        title={isMuted ? 'Unmute' : 'Mute'}
+      >
+        {isMuted ? '🔇' : '🔊'}
+      </button>
     </div>
   );
 };
