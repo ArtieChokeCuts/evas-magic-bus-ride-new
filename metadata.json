@@ -1,0 +1,7 @@
+{
+  "name": "Super Eva's Magic Ride",
+  "description": "An enchanting educational adventure for kids where they pop bubbles to learn math and spelling in a dreamy 3D world.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
