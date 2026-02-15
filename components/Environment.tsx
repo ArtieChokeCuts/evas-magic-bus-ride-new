@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Sky, Stars, Float, Cloud, Sparkles } from '@react-three/drei';
+import { Sky, Stars, Float, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 
@@ -10,23 +10,18 @@ const Environment: React.FC = () => {
 
   useEffect(() => {
     const loader = new THREE.TextureLoader();
-    const assetPath = './assets/eva.png';
+    const assetPath = './assets/input_file_0.png';
     
     loader.load(
       assetPath,
       (tex) => {
+        // Correct encoding for r165+
         tex.colorSpace = THREE.SRGBColorSpace;
-        tex.magFilter = THREE.LinearFilter;
-        tex.minFilter = THREE.LinearMipMapLinearFilter;
         setEvaTexture(tex);
       },
       undefined,
       (err) => {
-        console.warn(`Texture loading failed for ${assetPath}. Using fallback logic.`, err);
-        loader.load('./assets/input_file_0.png', (tex) => {
-          tex.colorSpace = THREE.SRGBColorSpace;
-          setEvaTexture(tex);
-        });
+        console.warn("Could not load Eva texture:", err);
       }
     );
 
@@ -37,37 +32,28 @@ const Environment: React.FC = () => {
 
   useFrame((state) => {
     if (glowRef.current) {
-      const s = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.15;
+      const s = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
       glowRef.current.scale.set(s, s, s);
     }
   });
 
   return (
     <>
+      {/* Lighting */}
+      <ambientLight intensity={1.2} />
+      <pointLight position={[10, 10, 10]} intensity={1.5} />
+      <pointLight position={[-10, -5, -5]} intensity={0.5} color="#ff00ff" />
+      
+      {/* Background Atmosphere */}
       <Sky distance={450000} sunPosition={[0, 1, 0]} inclination={0} azimuth={0.25} />
-      <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1.5} />
-      
-      <Sparkles 
-        count={80} 
-        scale={20} 
-        size={3} 
-        speed={0.5} 
-        opacity={0.6} 
-        color="#ffffff" 
-      />
+      <Stars radius={100} depth={50} count={2000} factor={4} saturation={0} fade speed={1} />
+      <Sparkles count={50} scale={12} size={3} speed={0.4} opacity={0.6} color="#FFF" />
 
-      <ambientLight intensity={1.5} />
-      <pointLight position={[10, 10, 10]} intensity={2} color="#ffffff" />
-      <pointLight position={[-10, -5, -5]} intensity={1} color="#ff00ff" />
-      
-      <Cloud position={[-15, 6, -15]} speed={0.1} opacity={0.4} segments={20} />
-      <Cloud position={[15, 8, -20]} speed={0.05} opacity={0.3} segments={15} />
-      <Cloud position={[0, -10, -12]} speed={0.15} opacity={0.3} segments={25} />
-
+      {/* Eva Character */}
       {evaTexture && (
-        <Float speed={3.5} rotationIntensity={0.1} floatIntensity={0.8}>
-          <group position={[0, -2, 0]}>
-            <sprite scale={[12, 12, 1]}>
+        <Float speed={2.5} rotationIntensity={0.05} floatIntensity={0.5}>
+          <group position={[0, -0.5, -2]}>
+            <sprite scale={[5, 5, 1]}>
               <spriteMaterial 
                 map={evaTexture} 
                 transparent={true} 
@@ -75,12 +61,12 @@ const Environment: React.FC = () => {
                 toneMapped={false}
               />
             </sprite>
-            <mesh ref={glowRef}>
-              <planeGeometry args={[13, 13]} />
+            <mesh ref={glowRef} position={[0, 0, -0.1]}>
+              <planeGeometry args={[6, 6]} />
               <meshBasicMaterial 
-                color="#a855f7" 
+                color="#c084fc" 
                 transparent 
-                opacity={0.15} 
+                opacity={0.2} 
                 blending={THREE.AdditiveBlending} 
                 side={THREE.DoubleSide}
               />
@@ -88,12 +74,6 @@ const Environment: React.FC = () => {
           </group>
         </Float>
       )}
-      
-      {/* Decorative magic path glow */}
-      <mesh position={[0, -5, -3]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[40, 10]} />
-        <meshBasicMaterial color="#ec4899" transparent opacity={0.05} blending={THREE.AdditiveBlending} />
-      </mesh>
     </>
   );
 };

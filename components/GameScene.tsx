@@ -15,7 +15,6 @@ interface GameSceneProps {
 const GameScene: React.FC<GameSceneProps> = ({ onScoreUpdate, onAnyPop, mathTarget, letterTarget }) => {
   const [bubbles, setBubbles] = useState<BubbleData[]>([]);
   
-  // Use a ref to track the latest targets for the pop handler
   const latestTargets = useRef({ math: mathTarget, spell: letterTarget });
   useEffect(() => {
     latestTargets.current = { math: mathTarget, spell: letterTarget };
@@ -25,19 +24,17 @@ const GameScene: React.FC<GameSceneProps> = ({ onScoreUpdate, onAnyPop, mathTarg
     const initial: BubbleData[] = [];
     const { math, spell } = latestTargets.current;
     
-    // Total bubbles per type
     const BUBBLES_PER_TYPE = 4;
 
-    // Adjusted spawn ranges for centered visibility
     for (let i = 0; i < BUBBLES_PER_TYPE; i++) {
       // Math bubbles
       initial.push({
         id: `math-${i}-${Math.random()}`,
         value: Math.random() > 0.4 ? math : (Math.floor(Math.random() * 15)).toString(),
         type: GameType.MATH,
-        position: [-4.5 + Math.random() * 2.5, -6 + i * 4, 0],
-        speed: 0.025 + Math.random() * 0.02,
-        color: '#8b5cf6' 
+        position: [-4 + Math.random() * 2, -5 + i * 3.5, 0],
+        speed: 0.02 + Math.random() * 0.02,
+        color: '#a855f7' 
       });
       
       // Spelling bubbles
@@ -45,9 +42,9 @@ const GameScene: React.FC<GameSceneProps> = ({ onScoreUpdate, onAnyPop, mathTarg
         id: `spell-${i}-${Math.random()}`,
         value: Math.random() > 0.4 ? spell : String.fromCharCode(65 + Math.floor(Math.random() * 26)),
         type: GameType.SPELLING,
-        position: [2 + Math.random() * 2.5, -6 + i * 4 + 2, 0],
-        speed: 0.025 + Math.random() * 0.02,
-        color: '#ec4899'
+        position: [2 + Math.random() * 2, -5 + i * 3.5 + 2, 0],
+        speed: 0.02 + Math.random() * 0.02,
+        color: '#f472b6'
       });
     }
     setBubbles(initial);
@@ -68,12 +65,11 @@ const GameScene: React.FC<GameSceneProps> = ({ onScoreUpdate, onAnyPop, mathTarg
     setBubbles(prev => {
       return prev.map(b => {
         if (b.id === id) {
-          // Re-spawn logic - spawn from bottom with new values
           const { math: currentMath, spell: currentSpell } = latestTargets.current;
-          const isTarget = Math.random() > 0.35;
+          const isTarget = Math.random() > 0.4;
           const xPos = type === GameType.MATH 
-            ? -4.5 + Math.random() * 2.5 
-            : 2 + Math.random() * 2.5;
+            ? -4 + Math.random() * 2 
+            : 2 + Math.random() * 2;
 
           return {
             ...b,
@@ -81,8 +77,8 @@ const GameScene: React.FC<GameSceneProps> = ({ onScoreUpdate, onAnyPop, mathTarg
             value: type === GameType.MATH 
               ? (isTarget ? currentMath : Math.floor(Math.random() * 20).toString())
               : (isTarget ? currentSpell : String.fromCharCode(65 + Math.floor(Math.random() * 26))),
-            position: [xPos, -8, 0],
-            speed: 0.025 + Math.random() * 0.025
+            position: [xPos, -7, 0],
+            speed: 0.02 + Math.random() * 0.025
           };
         }
         return b;
@@ -95,6 +91,7 @@ const GameScene: React.FC<GameSceneProps> = ({ onScoreUpdate, onAnyPop, mathTarg
       <Canvas 
         camera={{ position: [0, 0, 10], fov: 50 }} 
         dpr={[1, 2]}
+        gl={{ alpha: true }}
         style={{ width: '100%', height: '100%' }}
       >
         <Environment />
