@@ -1,11 +1,19 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { GameType, GameState, MATH_TARGETS, LETTER_TARGETS } from './types';
-import GameScene from './components/GameScene';
-import { getMagicalCompliment, generateMagicalSpeech, decodeBase64, decodeAudioData } from './geminiService';
+import React, { useState, useEffect, useRef } from 'react';
+import GameScene from './components/GameScene.jsx';
+import { getMagicalCompliment, generateMagicalSpeech, decodeBase64, decodeAudioData } from './geminiService.js';
+import { html } from 'htm/react';
 
-const App: React.FC = () => {
-  const [state, setState] = useState<GameState>({
+const GameType = {
+  MATH: 'math',
+  SPELLING: 'spelling'
+};
+
+const MATH_TARGETS = ['3', '7', '11', '15', '20', '25', '30'];
+const LETTER_TARGETS = ['E', 'V', 'A', 'S', 'U', 'P', 'E', 'R'];
+
+const App = () => {
+  const [state, setState] = useState({
     playing: false,
     mathLevel: 0,
     spellingLevel: 0,
@@ -18,14 +26,14 @@ const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const bgMusicRef = useRef<HTMLAudioElement | null>(null);
-  const popSoundRef = useRef<HTMLAudioElement | null>(null);
-  const magicSoundRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef(null);
+  const bgMusicRef = useRef(null);
+  const popSoundRef = useRef(null);
+  const magicSoundRef = useRef(null);
 
   // Initialize Audio Assets from ./assets/
   useEffect(() => {
-    const createSafeAudio = (path: string, volume: number = 0.5, loop: boolean = false) => {
+    const createSafeAudio = (path, volume = 0.5, loop = false) => {
       const audio = new Audio();
       audio.loop = loop;
       audio.volume = volume;
@@ -65,13 +73,13 @@ const App: React.FC = () => {
     }
   }, [isMuted, state.playing]);
 
-  const speakMessage = async (text: string) => {
+  const speakMessage = async (text) => {
     if (isMuted || isSpeaking) return;
     
     setIsSpeaking(true);
     try {
       if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
       }
       const ctx = audioContextRef.current;
       if (ctx.state === 'suspended') await ctx.resume();
@@ -94,7 +102,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleScoreUpdate = async (type: GameType) => {
+  const handleScoreUpdate = async (type) => {
     const magic = magicSoundRef.current;
     if (!isMuted && magic && magic.readyState >= 2) {
       magic.currentTime = 0;
@@ -158,39 +166,39 @@ const App: React.FC = () => {
     speakMessage("Ready to fly, Super Eva? Let's go!");
   };
 
-  return (
+  return html`
     <div className="relative w-full h-screen bg-gradient-to-b from-purple-900 via-indigo-900 to-blue-900 overflow-hidden font-sans text-white">
-      {state.playing && (
-        <GameScene 
-          mathTarget={state.currentMathTarget}
-          letterTarget={state.currentLetterTarget}
-          onScoreUpdate={handleScoreUpdate}
-          onAnyPop={handleAnyPop}
+      ${state.playing && html`
+        <${GameScene} 
+          mathTarget=${state.currentMathTarget}
+          letterTarget=${state.currentLetterTarget}
+          onScoreUpdate=${handleScoreUpdate}
+          onAnyPop=${handleAnyPop}
         />
-      )}
+      `}
 
-      {/* UI Overlay */}
+      <!-- UI Overlay -->
       <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start pointer-events-none z-10">
         <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 pointer-events-auto shadow-xl">
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-300 to-purple-300">
-            Super Eva's Adventure
+          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-300 to-purple-300 flex items-center gap-2">
+            <span>✨</span> Super Eva's Magic Ride
           </h1>
-          <div className="text-4xl font-black mt-1 drop-shadow-md">Score: {state.score}</div>
+          <div className="text-4xl font-black mt-1 drop-shadow-md text-white">Score: ${state.score}</div>
         </div>
 
         <div className="flex flex-col gap-3 pointer-events-auto">
           <div className="bg-blue-500/80 backdrop-blur-md p-3 rounded-xl border border-blue-300/50 min-w-[120px] text-center shadow-lg">
             <div className="text-[10px] uppercase tracking-widest opacity-80 font-bold">Find Number</div>
-            <div className="text-3xl font-black drop-shadow-sm">{state.currentMathTarget}</div>
+            <div className="text-3xl font-black drop-shadow-sm">${state.currentMathTarget}</div>
           </div>
           <div className="bg-pink-500/80 backdrop-blur-md p-3 rounded-xl border border-pink-300/50 min-w-[120px] text-center shadow-lg">
             <div className="text-[10px] uppercase tracking-widest opacity-80 font-bold">Find Letter</div>
-            <div className="text-3xl font-black drop-shadow-sm">{state.currentLetterTarget}</div>
+            <div className="text-3xl font-black drop-shadow-sm">${state.currentLetterTarget}</div>
           </div>
         </div>
       </div>
 
-      {/* Magic Message Bubble */}
+      <!-- Magic Message Bubble -->
       <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl z-20 pointer-events-none">
         <div className="bg-white/10 backdrop-blur-xl p-6 rounded-3xl border border-white/30 shadow-2xl transition-all duration-500 transform hover:scale-105">
           <div className="flex items-center gap-4">
@@ -198,29 +206,29 @@ const App: React.FC = () => {
               ✨
             </div>
             <p className="text-xl font-medium italic text-purple-100 drop-shadow-sm">
-              {state.magicMessage}
+              ${state.magicMessage}
             </p>
           </div>
         </div>
       </div>
 
-      {!state.playing && (
+      ${!state.playing && html`
         <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm">
           <div className="absolute inset-0 z-[-1]">
              <img 
                src="./assets/input_file_1.png" 
                alt="" 
                className="w-full h-full object-cover opacity-60"
-               onError={(e) => (e.currentTarget.style.display = 'none')}
+               onError=${(e) => (e.currentTarget.style.display = 'none')}
              />
           </div>
 
           <div className="bg-white/10 backdrop-blur-2xl p-12 rounded-[3rem] border border-white/20 text-center shadow-2xl max-w-lg mx-4">
             <h2 className="text-6xl font-black mb-8 text-white drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]">
-              Super Eva's Ride
+              Super Eva's Magic Ride
             </h2>
             <button 
-              onClick={startGame}
+              onClick=${startGame}
               className="group relative px-16 py-8 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full text-4xl font-black hover:scale-110 active:scale-95 transition-all shadow-2xl border-4 border-white/30"
             >
               <span className="relative z-10 text-white">LET'S FLY!</span>
@@ -231,17 +239,17 @@ const App: React.FC = () => {
             </p>
           </div>
         </div>
-      )}
+      `}
 
       <button 
-        onClick={() => setIsMuted(!isMuted)}
+        onClick=${() => setIsMuted(!isMuted)}
         className="absolute bottom-6 right-6 p-4 bg-white/10 hover:bg-white/20 rounded-full border border-white/20 transition-all pointer-events-auto z-30 text-2xl shadow-lg backdrop-blur-md"
-        title={isMuted ? 'Unmute' : 'Mute'}
+        title=${isMuted ? 'Unmute' : 'Mute'}
       >
-        {isMuted ? '🔇' : '🔊'}
+        ${isMuted ? '🔇' : '🔊'}
       </button>
     </div>
-  );
+  `;
 };
 
 export default App;

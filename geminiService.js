@@ -1,7 +1,16 @@
 
 import { GoogleGenAI, Modality } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getApiKey = () => {
+  try {
+    return process.env.API_KEY;
+  } catch (e) {
+    console.warn("process.env.API_KEY is not accessible.");
+    return "";
+  }
+};
+
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 export const getMagicalCompliment = async (name, level, type) => {
   try {

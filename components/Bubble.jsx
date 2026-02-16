@@ -2,6 +2,7 @@
 import React, { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text, Sphere, MeshWobbleMaterial } from '@react-three/drei';
+import { html } from 'htm/react';
 
 const Bubble = ({ value, type, position, color, onPop, speed }) => {
   const meshRef = useRef(null);
@@ -41,42 +42,42 @@ const Bubble = ({ value, type, position, color, onPop, speed }) => {
     }
   };
 
-  return (
+  return html`
     <group 
-      ref={meshRef} 
-      position={[position[0], position[1], position[2]]} 
-      onClick={handleClick} 
-      scale={scale}
+      ref=${meshRef} 
+      position=${[position[0], position[1], position[2]]} 
+      onClick=${handleClick} 
+      scale=${scale}
     >
-      <Sphere args={[0.75, 32, 32]}>
-        <MeshWobbleMaterial 
-          color={color} 
-          factor={0.4} 
-          speed={2} 
+      <${Sphere} args=${[0.75, 32, 32]}>
+        <${MeshWobbleMaterial} 
+          color=${color} 
+          factor=${0.4} 
+          speed=${2} 
           transparent 
-          opacity={0.8}
-          roughness={0}
-          metalness={0.1}
-          emissive={color}
-          emissiveIntensity={0.2}
+          opacity=${0.8}
+          roughness=${0}
+          metalness=${0.1}
+          emissive=${color}
+          emissiveIntensity=${0.2}
         />
-      </Sphere>
-      <Text
-        position={[0, 0, 0.8]}
-        fontSize={0.8}
+      <//>
+      <${Text}
+        position=${[0, 0, 0.8]}
+        fontSize=${0.8}
         color="white"
         anchorX="center"
         anchorY="middle"
-        outlineWidth={0.06}
+        outlineWidth=${0.06}
         outlineColor="#333"
       >
-        {value}
-      </Text>
-      <Sphere args={[0.2, 16, 16]} position={[0.3, 0.4, 0.5]}>
-        <meshBasicMaterial color="white" transparent opacity={0.6} />
-      </Sphere>
+        ${value}
+      <//>
+      <${Sphere} args=${[0.2, 16, 16]} position=${[0.3, 0.4, 0.5]}>
+        <meshBasicMaterial color="white" transparent opacity=${0.6} />
+      <//>
     </group>
-  );
+  `;
 };
 
 export default Bubble;

@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
-import Bubble from './Bubble';
-import Environment from './Environment';
+import Bubble from './Bubble.jsx';
+import Environment from './Environment.jsx';
+import { html } from 'htm/react';
 
 const GameType = {
   MATH: 'math',
@@ -83,25 +84,25 @@ const GameScene = ({ onScoreUpdate, onAnyPop, mathTarget, letterTarget }) => {
     });
   };
 
-  return (
+  return html`
     <div className="absolute inset-0 w-full h-full z-0">
-      <Canvas 
-        camera={{ position: [0, 0, 10], fov: 50 }} 
-        dpr={[1, 2]}
-        gl={{ alpha: true }}
-        style={{ width: '100%', height: '100%' }}
+      <${Canvas} 
+        camera=${{ position: [0, 0, 10], fov: 50 }} 
+        dpr=${[1, 2]}
+        gl=${{ alpha: true }}
+        style=${{ width: '100%', height: '100%' }}
       >
-        <Environment />
-        {bubbles.map(bubble => (
-          <Bubble
-            key={bubble.id}
-            {...bubble}
-            onPop={() => handlePop(bubble.id, bubble.type, bubble.value)}
+        <${Environment} />
+        ${bubbles.map(bubble => html`
+          <${Bubble}
+            key=${bubble.id}
+            ...${bubble}
+            onPop=${() => handlePop(bubble.id, bubble.type, bubble.value)}
           />
-        ))}
-      </Canvas>
+        `)}
+      <//>
     </div>
-  );
+  `;
 };
 
 export default GameScene;
